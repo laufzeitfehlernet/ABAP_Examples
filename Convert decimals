@@ -1,0 +1,74 @@
+CLASS zcl_utils DEFINITION  PUBLIC  FINAL  CREATE PUBLIC .
+  PUBLIC SECTION.    "Operation return status
+    CONSTANTS c_stat_success TYPE char1 VALUE 'S' ##NO_TEXT.
+    CONSTANTS c_stat_warning TYPE char1 VALUE 'W' ##NO_TEXT.
+    CONSTANTS c_stat_error   TYPE char1 VALUE 'E' ##NO_TEXT.
+    CONSTANTS c_stat_info    TYPE char1 VALUE 'I' ##NO_TEXT.    "Status Text
+    TYPES: BEGIN OF gty_status,
+             status      TYPE char1,
+             status_text TYPE char255,
+           END OF gty_status.
+    CLASS-METHODS convert_str_to_dec      IMPORTING VALUE(value)  TYPE clike
+                                                    VALUE(format) TYPE char30 OPTIONAL
+                                          EXPORTING result        TYPE clike
+                                                    status        TYPE gty_status.
+PROTECTED SECTION.
+
+  PRIVATE SECTION.
+ENDCLASS.
+
+
+
+CLASS ZCL_UTILS IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_UTILS=>CONVERT_STR_TO_DEC
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] VALUE                          TYPE        CLIKE
+* | [--->] FORMAT                         TYPE        CHAR30(optional)
+* | [<---] RESULT                         TYPE        CLIKE
+* | [<---] STATUS                         TYPE        GTY_STATUS
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD convert_str_to_dec.    "Expected input, sample 12.345,67    "
+    "Output should be 12345.67
+
+    DATA: exref TYPE REF TO cx_root.
+    TRY.
+        REPLACE ALL OCCURRENCES OF REGEX '[^(0-9.,)]' IN value WITH ''.
+        IF value IS NOT INITIAL.
+          IF format IS INITIAL.
+            format = value.
+          ENDIF.
+          FIND ALL OCCURRENCES OF '.' IN format MATCH COUNT DATA(dot_count).
+          FIND ALL OCCURRENCES OF ',' IN format MATCH COUNT DATA(comma_count).
+          IF dot_count > 1.
+            REPLACE ALL OCCURRENCES OF SUBSTRING '.' IN value WITH ''.
+            TRANSLATE value USING ',.'.
+          ELSEIF comma_count > 1.
+            REPLACE ALL OCCURRENCES OF SUBSTRING ',' IN value WITH ''.
+          ELSE.
+            FIND FIRST OCCURRENCE OF '.' IN format MATCH OFFSET DATA(dot_place).
+            FIND FIRST OCCURRENCE OF ',' IN format MATCH OFFSET DATA(comma_place).            "12.345,67 -> 12,345.67
+            IF dot_place IS NOT INITIAL AND comma_place IS NOT INITIAL.
+              IF dot_place < comma_place.
+                TRANSLATE value USING ',;'.
+                REPLACE ALL OCCURRENCES OF SUBSTRING '.' IN value WITH ''.
+                TRANSLATE value USING ';.'.
+              ELSE.
+                REPLACE ALL OCCURRENCES OF SUBSTRING ',' IN value WITH ''.
+              ENDIF.
+                                                            "12345,67
+            ELSEIF dot_place IS INITIAL AND comma_place IS NOT INITIAL.
+              TRANSLATE value USING ',.'.
+            ENDIF.
+          ENDIF.
+          result = value.
+          CONDENSE result        NO-GAPS.
+        ENDIF.
+        status-status = c_stat_success.
+      CATCH cx_root INTO exref.
+        status-status = c_stat_error.        status-status_text = exref->get_text( ).
+    ENDTRY.
+  ENDMETHOD.
+ENDCLASS.
